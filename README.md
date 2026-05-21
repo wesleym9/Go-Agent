@@ -178,6 +178,29 @@ To equip your agentic coding environment (e.g. Gemini Antigravity) with these cu
 
 ---
 
+## 🔑 Appendix: How to Get a Google Gemini API Key
+
+The detailed, pro-level 9-dan strategic commentary features of the companion are powered by Google's Gemini models. You can get an API key for free (or under a standard pay-as-you-go plan) in less than 2 minutes:
+
+1.  **Visit Google AI Studio**:
+    Go to the official [Google AI Studio](https://aistudio.google.com/) website.
+2.  **Sign In**:
+    Sign in using your standard Google/Gmail account.
+3.  **Create API Key**:
+    *   Click the prominent blue **"Get API key"** button in the top-left sidebar.
+    *   Click **"Create API key"**.
+    *   Choose to link it to a Google Cloud project (either select an existing project or let it auto-create a new one).
+4.  **Copy Your Key**:
+    Copy the generated API key string (starts with `AIzaSy...`).
+5.  **Use in the App**:
+    *   Paste the key directly into the **Gemini API Key input box** located in the top header of the web dashboard.
+    *   Toggle the **`Detailed AI`** switch **ON** to enable Gemini explanations. Toggling it **OFF** will use the fast, token-free local heuristic commentary fallback instead.
+    *   *Optionally, you can save the key in your local system environment variables as `GEMINI_API_KEY` to load it automatically on startup:*
+        *   **Windows (PowerShell)**: `[System.Environment]::SetEnvironmentVariable('GEMINI_API_KEY', 'your_key_here', 'User')`
+        *   **macOS/Linux**: `export GEMINI_API_KEY="your_key_here"`
+
+---
+
 ## 📝 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
