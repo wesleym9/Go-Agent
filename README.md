@@ -60,9 +60,28 @@ A state-of-the-art, mathematically precise, and aesthetically premium Go (Weiqi/
 
 ## 📥 Installation & Setup
 
+You can set up the application in two ways: either via the fully automated unified installer script (recommended) or through step-by-step manual configuration.
+
+### Method A: Automated One-Click Installer (Recommended)
+This script automatically installs all python dependencies, downloads and extracts the optimized Windows KataGo OpenCL engine binary, and fetches both the human and superhuman neural network models.
+
 1.  **Clone the Repository**:
     ```bash
-    git clone https://github.com/yourusername/go-agent.git
+    git clone https://github.com/wesleym9/Go-Agent.git
+    cd go-agent
+    ```
+2.  **Run the Installer**:
+    ```bash
+    python setup.py
+    ```
+
+---
+
+### Method B: Manual Step-by-Step Installation
+
+1.  **Clone the Repository**:
+    ```bash
+    git clone https://github.com/wesleym9/Go-Agent.git
     cd go-agent
     ```
 
