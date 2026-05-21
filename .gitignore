@@ -1,0 +1,35 @@
+# Python bytecode & cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE / Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project specific binaries (should be downloaded/configured locally)
+engine/katago.exe
+engine/KataGoData/
+models/*.bin.gz
+models/*.gz
+
+# Logs & temporary runtimes
+*.log
+analysis_logs/
+frontend/debug_assets/
+C:\Users\Wesley\.gemini\antigravity\

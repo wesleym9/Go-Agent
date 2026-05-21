@@ -1,0 +1,1603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Go Teaching AI Agent</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        [x-cloak] { display: none !important; }
+        
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+        }
+
+        .glass {
+            background: rgba(30, 41, 59, 0.45);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .glass-glow {
+            box-shadow: 0 8px 32px 0 rgba(99, 102, 241, 0.15);
+        }
+
+        .board-shadow {
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+        }
+
+        /* 3D Stone Styling */
+        .stone-black {
+            background: radial-gradient(circle at 8px 8px, #334155 0%, #0f172a 60%, #020617 100%);
+            box-shadow: 2px 3px 5px rgba(0, 0, 0, 0.7), inset -1px -1px 3px rgba(0, 0, 0, 0.6);
+        }
+
+        .stone-white {
+            background: radial-gradient(circle at 8px 8px, #ffffff 0%, #f1f5f9 50%, #cbd5e1 90%, #94a3b8 100%);
+            box-shadow: 2px 3px 5px rgba(0, 0, 0, 0.45), inset -1px -1px 2px rgba(255, 255, 255, 1);
+            border: 1px solid rgba(15, 23, 42, 0.15);
+        }
+
+        /* Stone Place pop-in tactile Overshoot animation */
+        @keyframes stone-pop {
+            0% { transform: scale(0.5); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .stone-placed {
+            animation: stone-pop 0.18s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        /* Variation Mode Glow effect */
+        .variation-active-glow {
+            animation: border-pulse 2s infinite;
+        }
+
+        @keyframes border-pulse {
+            0%, 100% { border-color: rgba(244, 63, 94, 0.4); box-shadow: 0 0 15px rgba(244, 63, 94, 0.2); }
+            50% { border-color: rgba(244, 63, 94, 0.8); box-shadow: 0 0 25px rgba(244, 63, 94, 0.5); }
+        }
+
+        /* Custom Scrollbar for insights */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body class="text-slate-100 min-h-screen flex flex-col font-sans selection:bg-indigo-500/30 selection:text-indigo-200">
+
+    <!-- Header -->
+    <header class="p-5 flex justify-between items-center glass border-b border-white/5 mb-6 sticky top-0 z-50">
+        <div class="flex items-center space-x-4">
+            <div class="p-2.5 bg-gradient-to-tr from-indigo-600 to-violet-500 rounded-2xl shadow-lg shadow-indigo-500/30">
+                <i class="fas fa-brain text-2xl text-white"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-extrabold tracking-tight">Antigravity Go <span class="text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-lg border border-indigo-500/20">Teacher</span></h1>
+                <p class="text-[10px] text-slate-400 mt-0.5">Real-time analysis, variation parsing & interactive companion</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-4" x-data="{ ogsInput: '', syncActive: false }" @ogs-update.window="syncActive = $event.detail.active">
+            <!-- WebSocket status -->
+            <div class="px-4 py-2 rounded-2xl glass flex items-center space-x-2.5">
+                <span class="w-2 h-2 rounded-full relative flex">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" 
+                          :class="$store.board.wsStatus === 'connected' ? 'bg-emerald-400' : 'bg-rose-400'"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2"
+                          :class="$store.board.wsStatus === 'connected' ? 'bg-emerald-500' : 'bg-rose-500'"></span>
+                </span>
+                <span class="text-xs font-semibold tracking-wide" x-text="$store.board.wsStatus === 'connected' ? 'AI Engine Live' : 'AI Offline'"></span>
+            </div>
+
+            <!-- Engine Mode Toggler -->
+            <div class="flex items-center glass p-1.5 rounded-2xl">
+                <div class="flex items-center pl-2 pr-1 space-x-2">
+                    <span class="text-[10px] font-bold uppercase tracking-wider transition-colors" 
+                          :class="$store.board.engineMode === 'superhuman' ? 'text-indigo-400' : 'text-slate-400'">
+                        <i class="fas" :class="$store.board.engineMode === 'superhuman' ? 'fa-bolt text-indigo-400' : 'fa-user-graduate'"></i>
+                        <span class="ml-1" x-text="$store.board.engineMode === 'superhuman' ? 'Superhuman AI' : 'Human 9D'"></span>
+                    </span>
+                    <button @click="$store.board.toggleEngineMode()" 
+                            class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+                            :class="$store.board.engineMode === 'superhuman' ? 'bg-indigo-600' : 'bg-slate-700'">
+                        <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                              :class="$store.board.engineMode === 'superhuman' ? 'translate-x-4' : 'translate-x-0'"></span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Side Selector -->
+            <div class="flex items-center glass p-1.5 rounded-2xl">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2">Your Side</span>
+                <div class="flex bg-slate-950/40 p-0.5 rounded-xl border border-white/5">
+                    <button @click="$store.board.setPlayerColor('none')" 
+                            :class="$store.board.playerColor === 'none' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'"
+                            class="text-[9px] font-bold px-2 py-1 rounded-lg transition-all duration-150 uppercase tracking-wider">Auto</button>
+                    <button @click="$store.board.setPlayerColor('B')" 
+                            :class="$store.board.playerColor === 'B' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'"
+                            class="text-[9px] font-bold px-2 py-1 rounded-lg transition-all duration-150 uppercase tracking-wider">Black</button>
+                    <button @click="$store.board.setPlayerColor('W')" 
+                            :class="$store.board.playerColor === 'W' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'"
+                            class="text-[9px] font-bold px-2 py-1 rounded-lg transition-all duration-150 uppercase tracking-wider">White</button>
+                </div>
+            </div>
+
+            <!-- Play Style Selector -->
+            <div class="flex items-center glass p-1.5 rounded-2xl">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2">Style</span>
+                <div class="flex bg-slate-950/40 p-0.5 rounded-xl border border-white/5">
+                    <button @click="$store.board.setPlayStyle('defensive')" 
+                            :class="$store.board.playStyle === 'defensive' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'"
+                            class="text-[9px] font-bold px-2.5 py-1 rounded-lg transition-all duration-150 uppercase tracking-wider flex items-center"><i class="fas fa-shield-halved mr-1"></i>Def</button>
+                    <button @click="$store.board.setPlayStyle('normal')" 
+                            :class="$store.board.playStyle === 'normal' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'"
+                            class="text-[9px] font-bold px-2.5 py-1 rounded-lg transition-all duration-150 uppercase tracking-wider flex items-center"><i class="fas fa-scale-balanced mr-1"></i>Bal</button>
+                    <button @click="$store.board.setPlayStyle('aggressive')" 
+                            :class="$store.board.playStyle === 'aggressive' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'"
+                            class="text-[9px] font-bold px-2.5 py-1 rounded-lg transition-all duration-150 uppercase tracking-wider flex items-center"><i class="fas fa-fire mr-1 text-rose-400 animate-pulse"></i>Atk</button>
+                </div>
+            </div>
+
+            <!-- Search Depth Selector -->
+            <div class="flex items-center glass p-1.5 rounded-2xl">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2">Search</span>
+                <div class="flex bg-slate-950/40 p-0.5 rounded-xl border border-white/5">
+                    <button @click="$store.board.setSearchDepth('standard')" 
+                            :class="$store.board.searchDepth === 'standard' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'"
+                            class="text-[9px] font-bold px-2.5 py-1 rounded-lg transition-all duration-150 uppercase tracking-wider flex items-center"><i class="fas fa-bolt mr-1"></i>Std</button>
+                    <button @click="$store.board.setSearchDepth('deep')" 
+                            :class="$store.board.searchDepth === 'deep' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'"
+                            class="text-[9px] font-bold px-2.5 py-1 rounded-lg transition-all duration-150 uppercase tracking-wider flex items-center"><i class="fas fa-microchip mr-1 text-indigo-400 animate-pulse"></i>Deep</button>
+                </div>
+            </div>
+
+            <!-- OGS Input & Toggle -->
+            <div class="flex items-center glass p-1.5 rounded-2xl">
+                <div class="flex items-center px-2">
+                    <i class="fas fa-link text-slate-500 text-xs mr-2"></i>
+                    <input type="text" placeholder="OGS Game ID" x-model="$store.board.ogsGameId" 
+                           class="bg-transparent text-xs outline-none w-24 border-r border-white/5 py-1 pr-2 text-slate-200 placeholder:text-slate-500">
+                </div>
+                <div class="flex items-center pl-2 pr-1 space-x-2">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Live Sync</span>
+                    <button @click="$store.board.toggleLiveSync()" 
+                            class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+                            :class="$store.board.liveSyncActive ? 'bg-indigo-600' : 'bg-slate-700'">
+                        <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                              :class="$store.board.liveSyncActive ? 'translate-x-4' : 'translate-x-0'"></span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Gemini API Key Input & Toggle -->
+            <div class="flex items-center glass p-1.5 rounded-2xl">
+                <div class="flex items-center px-2 border-r border-white/5">
+                    <i class="fas fa-key text-slate-500 text-xs mr-2"></i>
+                    <input type="password" placeholder="Gemini API Key" x-model="$store.board.geminiApiKey" 
+                           @input="localStorage.setItem('gemini_api_key', $store.board.geminiApiKey)"
+                           class="bg-transparent text-xs outline-none w-28 text-slate-200 placeholder:text-slate-500 py-1 pr-2">
+                </div>
+                <div class="flex items-center pl-2 pr-1 space-x-1.5">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Detailed AI</span>
+                    <button @click="$store.board.toggleGeminiExplanations()" 
+                            class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+                            :class="$store.board.useGeminiExplanations ? 'bg-indigo-600' : 'bg-slate-700'">
+                        <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                              :class="$store.board.useGeminiExplanations ? 'translate-x-4' : 'translate-x-0'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 container mx-auto px-4 pb-8 flex flex-col lg:flex-row gap-8" x-data>
+        
+        <!-- Left Sidebar: Analytics & Match Details -->
+        <aside class="w-full lg:w-[350px] flex flex-col gap-6 shrink-0">
+            <!-- Active OGS Game details (shown if active) -->
+            <template x-if="$store.board.ogsPlayers">
+                <div class="glass p-5 rounded-3xl border border-indigo-500/20 bg-indigo-950/20 shadow-lg">
+                    <h2 class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-3 flex items-center">
+                        <i class="fas fa-tv mr-2 animate-pulse text-indigo-400"></i> Synced OGS Match
+                    </h2>
+                    <div class="space-y-2.5">
+                        <div class="flex items-center justify-between p-2 rounded-xl bg-black/25">
+                            <span class="flex items-center text-sm font-medium">
+                                <span class="w-3.5 h-3.5 rounded-full stone-black mr-2"></span> Black
+                            </span>
+                            <span class="text-xs font-semibold text-slate-300 font-mono" x-text="$store.board.ogsPlayers.black"></span>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-xl bg-black/25">
+                            <span class="flex items-center text-sm font-medium">
+                                <span class="w-3.5 h-3.5 rounded-full stone-white mr-2"></span> White
+                            </span>
+                            <span class="text-xs font-semibold text-slate-300 font-mono" x-text="$store.board.ogsPlayers.white"></span>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Game Evaluation Metrics -->
+            <div class="glass p-5 rounded-3xl shadow-lg">
+                <h2 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Position Evaluator</h2>
+                
+                <!-- Win Rate Bar -->
+                <div class="mb-5">
+                    <div class="flex justify-between text-xs font-semibold text-slate-300 mb-1.5">
+                        <span>Win Probability</span>
+                        <span x-text="$store.board.winRate + '% B'"></span>
+                    </div>
+                    <div class="w-full h-3 rounded-full bg-slate-950 overflow-hidden flex border border-white/5">
+                        <div class="h-full bg-indigo-600 transition-all duration-500" :style="`width: ${$store.board.winRate}%`"></div>
+                        <div class="h-full bg-slate-200 transition-all duration-500 flex-1"></div>
+                    </div>
+                    <div class="flex justify-between text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">
+                        <span>Black</span>
+                        <span>White</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="p-3 rounded-2xl bg-slate-900/60 border border-white/5 flex flex-col items-center">
+                        <span class="text-2xl font-black font-mono tracking-tight" 
+                              :class="$store.board.scoreLead >= 0 ? 'text-indigo-400' : 'text-slate-400'"
+                              x-text="($store.board.scoreLead >= 0 ? '+' : '') + $store.board.scoreLead"></span>
+                        <span class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-1">Score Lead (B)</span>
+                    </div>
+                    <div class="p-3 rounded-2xl bg-slate-900/60 border border-white/5 flex flex-col items-center">
+                        <div class="flex items-center space-x-1 mt-1">
+                            <span class="text-xs font-bold text-slate-300 font-mono" x-text="$store.board.captures.black"></span>
+                            <span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">B</span>
+                            <span class="text-slate-600">/</span>
+                            <span class="text-xs font-bold text-slate-300 font-mono" x-text="$store.board.captures.white"></span>
+                            <span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">W</span>
+                        </div>
+                        <span class="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-2">Captured Stones</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dynamic Teaching Insights -->
+            <div class="glass p-5 rounded-3xl flex-1 flex flex-col shadow-lg overflow-hidden min-h-[300px]">
+                <h2 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center justify-between">
+                    <span>AI Move Recommendations</span>
+                    <span class="text-[9px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full font-mono uppercase" 
+                          x-text="'Move ' + ($store.board.moveHistory.length + 1)"></span>
+                </h2>
+                
+                <div class="flex-1 overflow-y-auto space-y-3.5 pr-1" x-show="$store.board.suggestions.length > 0">
+                    <template x-for="(sug, index) in $store.board.suggestions" :key="sug.move">
+                        <div class="p-3.5 rounded-2xl transition-all duration-200 cursor-pointer border flex flex-col" 
+                             :class="$store.board.selectedSuggestion === index 
+                                     ? 'bg-indigo-600/10 border-indigo-500/40 shadow-inner shadow-indigo-500/5' 
+                                     : 'bg-slate-900/45 border-white/5 hover:bg-slate-800/30'"
+                             @click="$store.board.selectSuggestion(index)"
+                             @mouseenter="$store.board.hoveredSuggestionIndex = index"
+                             @mouseleave="if ($store.board.hoveredSuggestionIndex === index) $store.board.hoveredSuggestionIndex = null">
+                            
+                            <!-- Header Info -->
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="font-extrabold text-sm font-mono tracking-tight flex items-center">
+                                    <span class="w-2.5 h-2.5 rounded-full mr-2" 
+                                          :class="$store.board.turn === 'black' ? 'stone-black' : 'stone-white'"></span>
+                                    <span x-text="sug.move"></span>
+                                </span>
+                                <div class="flex items-center space-x-1.5">
+                                    <span class="text-[10px] font-mono bg-indigo-500/20 text-indigo-400 border border-indigo-500/10 px-2 py-0.5 rounded-lg" 
+                                          x-text="Math.round(sug.winrate * 100) + '%'"></span>
+                                    <span class="text-[10px] font-mono px-1.5 py-0.5 rounded-lg" 
+                                          :class="sug.score >= 0 ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'"
+                                          x-text="(sug.score >= 0 ? '+' : '') + sug.score.toFixed(1)"></span>
+                                </div>
+                            </div>
+                            
+                            <!-- Insight explanation -->
+                            <p class="text-xs text-slate-400 leading-relaxed font-medium mb-2.5 whitespace-pre-line" x-text="sug.explanation"></p>
+                            
+                            <!-- AI Expert Commentary Block -->
+                            <div class="border-t border-white/5 pt-2 mt-1">
+                                <template x-if="sug.aiCommentary">
+                                    <div class="p-2 bg-indigo-950/15 border border-indigo-500/10 rounded-xl">
+                                        <p class="text-[10px] text-indigo-200 leading-relaxed italic whitespace-pre-line" x-text="sug.aiCommentary"></p>
+                                        <span class="text-[8px] font-bold uppercase tracking-wider text-indigo-400 block mt-1"><i class="fas fa-certificate mr-1 text-[7px]"></i> Pro 9D Commentary</span>
+                                    </div>
+                                </template>
+                                <template x-if="!sug.aiCommentary">
+                                    <button @click.stop="$store.board.fetchAICommentary(index)" 
+                                            class="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 transition-colors uppercase tracking-wider flex items-center"
+                                            :disabled="sug.loadingExplanation">
+                                        <i class="fas fa-wand-magic-sparkles mr-1.5 animate-pulse" x-show="!sug.loadingExplanation"></i>
+                                        <i class="fas fa-spinner fa-spin mr-1.5" x-show="sug.loadingExplanation"></i>
+                                        <span x-text="sug.loadingExplanation ? 'Analyzing Position...' : ($store.board.useGeminiExplanations ? 'Ask AI Go Master' : 'Show Local Heuristic')"></span>
+                                    </button>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                
+                <div x-show="$store.board.suggestions.length === 0" class="flex-1 flex flex-col items-center justify-center py-12 text-slate-500 italic text-sm">
+                    <i class="fas fa-shapes text-3xl mb-3 text-slate-700"></i>
+                    Place a stone to see analysis...
+                </div>
+            </div>
+        </aside>
+
+        <!-- Center: Interactive Game Board & Variation controls -->
+        <div class="flex-1 flex flex-col items-center justify-center py-2">
+            
+            <!-- Warning block on bot play policies -->
+            <div class="mb-4 px-4 py-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200 flex items-center space-x-2.5 max-w-[600px] shadow-sm">
+                <i class="fas fa-triangle-exclamation text-amber-400 text-base"></i>
+                <p><strong>Note:</strong> Playing AI moves in rated OGS matches violates fair play. Use this companion for study, review, or custom unrated matches.</p>
+            </div>
+
+            <!-- Variation Mode Banner -->
+            <template x-if="$store.board.variationMode">
+                <div class="mb-4 px-6 py-2.5 rounded-2xl bg-rose-500/20 border border-rose-500/40 text-sm flex items-center justify-between w-full max-w-[600px] variation-active-glow">
+                    <span class="font-bold text-rose-200 flex items-center uppercase tracking-wider text-xs">
+                        <i class="fas fa-compass text-rose-400 mr-2.5 text-sm animate-pulse"></i> 
+                        Exploring Variation: Path for <span class="font-mono text-rose-100 bg-rose-500/20 px-1.5 py-0.5 rounded ml-1" x-text="$store.board.selectedVariationMove"></span>
+                    </span>
+                    <span class="text-[10px] text-rose-300/80 font-medium hidden md:inline-block">Use the controls below to step through</span>
+                    <button @click="$store.board.exitVariationMode()" class="text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 px-3.5 py-1.5 rounded-xl transition-colors shadow-lg">
+                        <i class="fas fa-times-circle mr-1.5"></i> Exit Explorer
+                    </button>
+                </div>
+            </template>
+
+            <!-- Board container -->
+            <div class="relative bg-[#e4a853] shadow-2xl rounded-2xl border-[16px] border-[#925528] select-none board-shadow relative shrink-0" 
+                 style="width: 600px; height: 600px; background-image: url('https://www.transparenttextures.com/patterns/wood-pattern.png');"
+                 @click="$store.board.handleBoardClick($event)"
+                 @mousemove="$store.board.handleBoardMouseMove($event)"
+                 @mouseleave="$store.board.hoveredIntersection = null">
+                
+                <!-- Coordinate labels -->
+                <!-- Top Letters -->
+                <template x-for="(char, idx) in $store.board.letters" :key="'let-top-'+idx">
+                    <div class="absolute text-[11px] font-black text-amber-950/75 font-mono text-center pointer-events-none"
+                         style="top: 8px; transform: translateX(-50%); width: 20px;"
+                         :style="`left: ${idx * 28 + 32}px`"
+                         x-text="char"></div>
+                </template>
+                <!-- Bottom Letters -->
+                <template x-for="(char, idx) in $store.board.letters" :key="'let-bot-'+idx">
+                    <div class="absolute text-[11px] font-black text-amber-950/75 font-mono text-center pointer-events-none"
+                         style="bottom: 8px; transform: translateX(-50%); width: 20px;"
+                         :style="`left: ${idx * 28 + 32}px`"
+                         x-text="char"></div>
+                </template>
+                <!-- Left Numbers -->
+                <template x-for="rowIdx in 19" :key="'num-left-'+rowIdx">
+                    <div class="absolute text-[11px] font-black text-amber-950/75 font-mono text-center pointer-events-none flex items-center justify-center"
+                         style="left: 6px; transform: translateY(-50%); height: 20px; width: 20px;"
+                         :style="`top: ${(rowIdx - 1) * 28 + 32}px`"
+                         x-text="20 - rowIdx"></div>
+                </template>
+                <!-- Right Numbers -->
+                <template x-for="rowIdx in 19" :key="'num-right-'+rowIdx">
+                    <div class="absolute text-[11px] font-black text-amber-950/75 font-mono text-center pointer-events-none flex items-center justify-center"
+                         style="right: 6px; transform: translateY(-50%); height: 20px; width: 20px;"
+                         :style="`top: ${(rowIdx - 1) * 28 + 32}px`"
+                         x-text="20 - rowIdx"></div>
+                </template>
+
+                <!-- Board Lines (Draw lines inside margin of 32px, 18 intervals of 28px) -->
+                <div class="absolute pointer-events-none" 
+                     style="left: 32px; top: 32px; width: 504px; height: 504px; box-sizing: content-box;
+                            border-right: 1.5px solid rgba(15,23,42,0.85); border-bottom: 1.5px solid rgba(15,23,42,0.85);
+                            background-size: 28px 28px;
+                            background-image: linear-gradient(to right, rgba(15,23,42,0.85) 1.5px, transparent 1.5px), 
+                                              linear-gradient(to bottom, rgba(15,23,42,0.85) 1.5px, transparent 1.5px);">
+                </div>
+
+                <!-- Star Points SVG Layer (Centers are at intersections) -->
+                <svg width="568" height="568" class="absolute inset-0 pointer-events-none z-10">
+                    <circle cx="116" cy="116" r="4" fill="rgba(15,23,42,0.9)" />
+                    <circle cx="284" cy="116" r="4" fill="rgba(15,23,42,0.9)" />
+                    <circle cx="452" cy="116" r="4" fill="rgba(15,23,42,0.9)" />
+                    <circle cx="116" cy="284" r="4" fill="rgba(15,23,42,0.9)" />
+                    <circle cx="284" cy="284" r="4" fill="rgba(15,23,42,0.9)" />
+                    <circle cx="452" cy="284" r="4" fill="rgba(15,23,42,0.9)" />
+                    <circle cx="116" cy="452" r="4" fill="rgba(15,23,42,0.9)" />
+                    <circle cx="284" cy="452" r="4" fill="rgba(15,23,42,0.9)" />
+                    <circle cx="452" cy="452" r="4" fill="rgba(15,23,42,0.9)" />
+                </svg>
+
+                <!-- Placed Stones Layer -->
+                <template x-for="stone in $store.board.placedStones" :key="stone.key">
+                    <div class="absolute w-[26px] h-[26px] rounded-full z-20 stone-placed"
+                         :class="stone.color === 'black' ? 'stone-black' : 'stone-white'"
+                         :style="`left: ${stone.x}px; top: ${stone.y}px;`"></div>
+                </template>
+
+                <!-- Last played stone indicator -->
+                <template x-if="$store.board.lastPlayedStoneCoords">
+                    <div class="absolute w-2 h-2 rounded-full bg-rose-500 z-30 pointer-events-none animate-pulse"
+                         :style="`left: ${$store.board.lastPlayedStoneCoords.x}px; top: ${$store.board.lastPlayedStoneCoords.y}px;`"></div>
+                </template>
+
+                <!-- Hover Ghost Stone Layer (Click helper) -->
+                <template x-if="$store.board.shouldShowGhost()">
+                    <div class="absolute w-[26px] h-[26px] rounded-full pointer-events-none z-15 transition-all duration-100"
+                         :class="$store.board.customMode 
+                                 ? 'bg-amber-500/40 border border-dashed border-amber-400 animate-pulse scale-105 shadow-lg shadow-amber-500/20'
+                                 : ($store.board.turn === 'black' ? 'stone-black opacity-40' : 'stone-white opacity-40')"
+                         :style="`left: ${$store.board.ghostCoords.x}px; top: ${$store.board.ghostCoords.y}px;`"></div>
+                </template>
+
+                <!-- Custom Proposed Move Marker -->
+                <template x-if="$store.board.customMove">
+                    <div class="absolute w-[26px] h-[26px] rounded-full pointer-events-none z-20 flex items-center justify-center border-2 border-amber-400 bg-amber-500/40 shadow-lg shadow-amber-500/50 scale-105"
+                         :style="`left: ${$store.board.notationToCoords($store.board.customMove)[0] * 28 + 19}px; top: ${$store.board.notationToCoords($store.board.customMove)[1] * 28 + 19}px;`">
+                         <div class="w-2.5 h-2.5 rounded-full bg-amber-300 animate-ping"></div>
+                         <div class="absolute w-2 h-2 rounded-full bg-amber-400"></div>
+                    </div>
+                </template>
+
+                <!-- PV (Future Response Path) Numbered Overlay -->
+                <template x-for="(pvStone, idx) in $store.board.activePVStones" :key="pvStone.key">
+                    <div class="absolute w-[26px] h-[26px] rounded-full border border-dashed flex items-center justify-center pointer-events-none z-30 opacity-90 shadow-md transform hover:scale-110 transition-transform"
+                         :class="pvStone.color === 'black' 
+                                 ? 'bg-black/90 text-white border-white/60 shadow-black/50' 
+                                 : 'bg-white/90 text-black border-black/60 shadow-slate-400/50'"
+                         :style="`left: ${pvStone.x}px; top: ${pvStone.y}px;`">
+                        <span class="text-[9px] font-black font-mono leading-none" x-text="idx + 1"></span>
+                    </div>
+                </template>
+
+                <!-- Visual indicators of top suggested moves -->
+                <template x-if="!$store.board.variationMode">
+                    <template x-for="(sug, index) in $store.board.suggestions">
+                        <div class="absolute w-4 h-4 rounded-full border-2 border-indigo-400 bg-indigo-500/30 flex items-center justify-center z-20 pointer-events-none animate-pulse cursor-pointer shadow shadow-indigo-500"
+                             :style="`left: ${sug.coords[0] * 28 + 24}px; top: ${sug.coords[1] * 28 + 24}px;`">
+                             <span class="text-[8px] font-black text-indigo-100" x-text="index + 1"></span>
+                        </div>
+                    </template>
+                </template>
+            </div>
+            
+            <!-- Stepper Stepper: Variation Exploration navigation -->
+            <template x-if="$store.board.variationMode">
+                <div class="mt-6 flex flex-col items-center justify-center space-y-3 p-4 rounded-2xl glass w-full max-w-[600px] shadow-lg border border-white/5">
+                    <div class="flex items-center space-x-6">
+                        <button @click="$store.board.variationStep = 0; $store.board.rebuildBoard()" 
+                                class="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold transition-colors flex items-center"
+                                :disabled="$store.board.variationStep === 0"
+                                :class="$store.board.variationStep === 0 ? 'opacity-50 cursor-not-allowed' : ''">
+                            <i class="fas fa-backward-fast mr-1"></i> First
+                        </button>
+                        <button @click="$store.board.stepVariation(-1)" 
+                                class="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold transition-colors flex items-center"
+                                :disabled="$store.board.variationStep === 0"
+                                :class="$store.board.variationStep === 0 ? 'opacity-50 cursor-not-allowed' : ''">
+                            <i class="fas fa-chevron-left mr-1"></i> Prev
+                        </button>
+                        
+                        <div class="text-xs font-bold text-slate-300 uppercase tracking-widest font-mono">
+                            Variation Move <span class="text-rose-400 text-sm px-1.5 py-0.5 bg-rose-500/10 border border-rose-500/20 rounded" 
+                                                x-text="$store.board.variationStep"></span> 
+                            / <span class="text-slate-500" x-text="$store.board.selectedVariation.length"></span>
+                        </div>
+
+                        <button @click="$store.board.stepVariation(1)" 
+                                class="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold transition-colors flex items-center"
+                                :disabled="$store.board.variationStep === $store.board.selectedVariation.length"
+                                :class="$store.board.variationStep === $store.board.selectedVariation.length ? 'opacity-50 cursor-not-allowed' : ''">
+                            Next <i class="fas fa-chevron-right ml-1"></i>
+                        </button>
+                        <button @click="$store.board.variationStep = $store.board.selectedVariation.length; $store.board.rebuildBoard()" 
+                                class="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold transition-colors flex items-center"
+                                :disabled="$store.board.variationStep === $store.board.selectedVariation.length"
+                                :class="$store.board.variationStep === $store.board.selectedVariation.length ? 'opacity-50 cursor-not-allowed' : ''">
+                            Last <i class="fas fa-forward-fast ml-1"></i>
+                        </button>
+                    </div>
+
+                    <!-- Progress line -->
+                    <div class="w-full px-4 flex items-center space-x-2">
+                        <span class="text-[9px] font-mono text-slate-500">0</span>
+                        <input type="range" min="0" :max="$store.board.selectedVariation.length" x-model.number="$store.board.variationStep"
+                               @input="$store.board.rebuildBoard()"
+                               class="flex-1 accent-indigo-500 h-1 bg-slate-800 rounded-lg cursor-pointer">
+                        <span class="text-[9px] font-mono text-slate-500" x-text="$store.board.selectedVariation.length"></span>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Bottom Panel: General gameplay actions -->
+            <template x-if="!$store.board.variationMode">
+                <div class="mt-6 flex space-x-4">
+                    <button @click="$store.board.resetBoard()" class="px-5 py-2.5 rounded-2xl glass hover:bg-white/10 transition-colors font-bold text-xs flex items-center text-slate-300">
+                        <i class="fas fa-undo mr-2 text-[10px]"></i> Reset Match
+                    </button>
+                    <button @click="$store.board.undoMove()" class="px-5 py-2.5 rounded-2xl glass hover:bg-white/10 transition-colors font-bold text-xs flex items-center text-slate-300">
+                        <i class="fas fa-step-backward mr-2 text-[10px]"></i> Undo Play
+                    </button>
+                    <button @click="$store.board.passMove()" class="px-5 py-2.5 rounded-2xl glass hover:bg-white/10 transition-colors font-bold text-xs flex items-center text-slate-300">
+                        <i class="fas fa-forward mr-2 text-[10px]"></i> Pass Turn
+                    </button>
+                </div>
+            </template>
+        </div>
+
+        <!-- Right Sidebar: Variation list view and Strategy details -->
+        <aside class="w-full lg:w-[320px] flex flex-col gap-6 shrink-0">
+            <!-- Propose Custom Move Panel -->
+            <div class="glass p-5 rounded-3xl border transition-all duration-300 shadow-lg flex flex-col relative overflow-hidden"
+                 :class="$store.board.customMode ? 'border-amber-500/40 bg-amber-950/5 shadow-amber-500/5' : 'border-white/5 bg-slate-950/20'">
+                 
+                 <!-- Subtle background glowing aura when customMode is active -->
+                 <div x-show="$store.board.customMode" class="absolute -right-16 -top-16 w-32 h-32 rounded-full bg-amber-500/10 blur-2xl pointer-events-none transition-all duration-500"></div>
+                 
+                 <!-- Header -->
+                 <div class="flex justify-between items-center mb-3">
+                     <h2 class="text-[10px] font-bold uppercase tracking-widest flex items-center"
+                         :class="$store.board.customMode ? 'text-amber-400' : 'text-slate-400'">
+                         <i class="fas fa-crosshairs mr-2" :class="$store.board.customMode ? 'animate-pulse text-amber-400' : 'text-slate-500'"></i> Propose Custom Move
+                     </h2>
+                     <template x-if="$store.board.customMode">
+                         <span class="text-[9px] bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full font-bold uppercase animate-pulse">Active</span>
+                     </template>
+                 </div>
+                 
+                 <!-- STATE 1: Propose Mode NOT Active -->
+                 <div x-show="!$store.board.customMode" class="space-y-3">
+                     <p class="text-xs text-slate-400 leading-relaxed font-medium">
+                         Want to play a move that's not in the AI's top suggestions? Propose any move on the board to evaluate its winrate delta, explore its follow-up sequence, and get pro-level tactical commentary.
+                     </p>
+                     <button @click="$store.board.customMode = true; $store.board.customMove = null; $store.board.customAnalysis = null; $store.board.customAnalysisLoading = false;"
+                             class="w-full py-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all duration-200 shadow-md shadow-amber-600/15 flex items-center justify-center">
+                         <i class="fas fa-hand-pointer mr-1.5"></i> Start Proposal Mode
+                     </button>
+                 </div>
+                 
+                 <!-- STATE 2: Propose Mode Active, No Move Selected Yet -->
+                 <div x-show="$store.board.customMode && !$store.board.customMove" class="space-y-3.5">
+                     <div class="p-3 rounded-2xl bg-amber-500/5 border border-amber-500/15 flex flex-col items-center justify-center py-6 text-center">
+                         <div class="w-10 h-10 rounded-full border-2 border-dashed border-amber-400/40 flex items-center justify-center mb-2.5 animate-bounce">
+                             <i class="fas fa-mouse-pointer text-amber-400 text-sm"></i>
+                         </div>
+                         <span class="text-xs font-semibold text-amber-200">Click any empty intersection</span>
+                         <span class="text-[10px] text-slate-500 mt-1">Select a point on the board to propose your move</span>
+                     </div>
+                     <button @click="$store.board.exitCustomMode()"
+                             class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-colors flex items-center justify-center">
+                         <i class="fas fa-times mr-1.5"></i> Cancel
+                     </button>
+                 </div>
+                 
+                 <!-- STATE 3: Custom Move Selected, Analysis Loading -->
+                 <div x-show="$store.board.customMode && $store.board.customMove && $store.board.customAnalysisLoading" class="space-y-3.5">
+                     <div class="p-3 rounded-2xl bg-amber-500/5 border border-amber-500/15 flex flex-col items-center justify-center py-6 text-center">
+                         <div class="mb-3.5 flex items-center justify-center relative">
+                             <!-- Glowing pulse rings -->
+                             <span class="animate-ping absolute inline-flex h-8 w-8 rounded-full bg-amber-500 opacity-20"></span>
+                             <span class="animate-pulse absolute inline-flex h-10 w-10 rounded-full bg-amber-500 opacity-10"></span>
+                             <div class="relative w-8 h-8 rounded-full border-2 border-amber-500 border-t-transparent animate-spin flex items-center justify-center"></div>
+                         </div>
+                         <span class="text-xs font-bold text-amber-200">Evaluating proposed play at <span class="font-mono text-amber-300 bg-amber-500/10 px-1.5 py-0.5 rounded" x-text="$store.board.customMove"></span>...</span>
+                         <span class="text-[10px] text-slate-500 mt-1.5">KataGo neural network is running playouts</span>
+                     </div>
+                     <button @click="$store.board.exitCustomMode()"
+                             class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-colors flex items-center justify-center">
+                         <i class="fas fa-times mr-1.5"></i> Cancel
+                     </button>
+                 </div>
+                 
+                 <!-- STATE 4: Custom Move Selected & Analyzed -->
+                 <div x-show="$store.board.customMode && $store.board.customMove && !$store.board.customAnalysisLoading && $store.board.customAnalysis" class="space-y-4">
+                     <!-- Move Card -->
+                     <div class="p-3.5 rounded-2xl bg-slate-900/60 border border-amber-500/25 hover:border-amber-500/40 transition-colors shadow-inner flex flex-col"
+                          @mouseenter="$store.board.hoveredCustomMove = true"
+                          @mouseleave="$store.board.hoveredCustomMove = false">
+                          
+                          <!-- Coordinate Badge & Metrics -->
+                          <div class="flex justify-between items-center mb-2.5">
+                              <span class="font-black text-sm font-mono tracking-tight text-amber-300 flex items-center">
+                                  <i class="fas fa-location-crosshairs mr-1.5 text-xs text-amber-400"></i>
+                                  <span x-text="$store.board.customMove"></span>
+                              </span>
+                              <div class="flex items-center space-x-1.5">
+                                  <!-- Winrate change -->
+                                  <span class="text-[10px] font-mono px-2 py-0.5 rounded-lg border font-extrabold"
+                                        :class="$store.board.customAnalysis.winrateChange >= 0 
+                                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                                                : ($store.board.customAnalysis.winrateChange >= -5 
+                                                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                                    : 'bg-rose-500/10 text-rose-400 border-rose-500/20')"
+                                        x-text="($store.board.customAnalysis.winrateChange >= 0 ? '+' : '') + $store.board.customAnalysis.winrateChange + '%'"></span>
+                                  
+                                  <!-- Point lead change -->
+                                  <span class="text-[10px] font-mono px-1.5 py-0.5 rounded-lg border font-extrabold"
+                                        :class="$store.board.customAnalysis.scoreChange >= 0 
+                                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                                                : ($store.board.customAnalysis.scoreChange >= -1.5 
+                                                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                                    : 'bg-rose-500/10 text-rose-400 border-rose-500/20')"
+                                        x-text="($store.board.customAnalysis.scoreChange >= 0 ? '+' : '') + $store.board.customAnalysis.scoreChange + ' pts'"></span>
+                              </div>
+                          </div>
+                          
+                          <!-- General move evaluation helper message based on winrateChange -->
+                          <div class="text-[11px] font-semibold mb-3 leading-snug">
+                              <template x-if="$store.board.customAnalysis.winrateChange >= 0">
+                                  <span class="text-emerald-400"><i class="fas fa-check-double mr-1 text-[9px]"></i> An excellent move! Equal to or better than the suggestions.</span>
+                              </template>
+                              <template x-if="$store.board.customAnalysis.winrateChange < 0 && $store.board.customAnalysis.winrateChange >= -3">
+                                  <span class="text-emerald-500/80"><i class="fas fa-check mr-1 text-[9px]"></i> Solid, playable play. Minimal loss of win probability.</span>
+                              </template>
+                              <template x-if="$store.board.customAnalysis.winrateChange < -3 && $store.board.customAnalysis.winrateChange >= -10">
+                                  <span class="text-amber-400"><i class="fas fa-circle-exclamation mr-1 text-[9px]"></i> A slightly slow or passive choice (concedes win probability).</span>
+                              </template>
+                              <template x-if="$store.board.customAnalysis.winrateChange < -10">
+                                  <span class="text-rose-400"><i class="fas fa-circle-xmark mr-1 text-[9px]"></i> Strategic error / blunder. Concedes significant value.</span>
+                              </template>
+                          </div>
+                          
+                          <!-- AI Expert Commentary Block -->
+                          <div class="border-t border-white/5 pt-2.5 mt-1">
+                              <template x-if="$store.board.customAnalysis.aiCommentary">
+                                  <div class="p-2.5 bg-amber-500/5 border border-amber-500/15 rounded-xl">
+                                      <p class="text-[10px] text-amber-200 leading-relaxed italic whitespace-pre-line" x-text="$store.board.customAnalysis.aiCommentary"></p>
+                                      <span class="text-[8px] font-bold uppercase tracking-wider text-amber-400 block mt-1.5"><i class="fas fa-certificate mr-1 text-[7px]"></i> Pro 9D Tactical Explanation</span>
+                                  </div>
+                              </template>
+                              <template x-if="!$store.board.customAnalysis.aiCommentary">
+                                  <button @click.stop="$store.board.fetchCustomAICommentary()" 
+                                          class="w-full py-1.5 bg-amber-500/10 hover:bg-amber-500/15 text-amber-400 border border-amber-500/20 text-[10px] font-bold rounded-xl transition-all duration-200 uppercase tracking-wider flex items-center justify-center"
+                                          :disabled="$store.board.customAnalysis.loadingCommentary">
+                                      <i class="fas fa-wand-magic-sparkles mr-1.5 animate-pulse" x-show="!$store.board.customAnalysis.loadingCommentary"></i>
+                                      <i class="fas fa-spinner fa-spin mr-1.5" x-show="$store.board.customAnalysis.loadingCommentary"></i>
+                                      <span x-text="$store.board.customAnalysis.loadingCommentary ? 'Formulating Commentary...' : ($store.board.useGeminiExplanations ? 'Ask AI Go Master' : 'Show Local Heuristic')"></span>
+                                  </button>
+                              </template>
+                          </div>
+                     </div>
+                     
+                     <!-- PV stones info (hover card helper) -->
+                     <p class="text-[10px] text-slate-500 leading-tight text-center font-medium italic">
+                         <i class="fas fa-info-circle mr-1"></i> Hover this card to see anticipated future stones in gold on the board!
+                     </p>
+                     
+                     <!-- Interaction Controls -->
+                     <div class="grid grid-cols-2 gap-2">
+                         <button @click="$store.board.exploreCustomVariation()"
+                                 class="py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-colors shadow-md shadow-indigo-600/10 flex items-center justify-center">
+                             <i class="fas fa-route mr-1.5"></i> Explore PV
+                         </button>
+                         <button @click="$store.board.addCustomMoveToGame()"
+                                 class="py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-colors shadow-md shadow-emerald-600/10 flex items-center justify-center">
+                             <i class="fas fa-plus mr-1.5"></i> Play Move
+                         </button>
+                     </div>
+                     
+                     <button @click="$store.board.exitCustomMode()"
+                             class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-colors flex items-center justify-center">
+                         <i class="fas fa-times mr-1.5"></i> Exit Proposal Mode
+                     </button>
+                 </div>
+            </div>
+
+            <div class="glass p-5 rounded-3xl min-h-[300px] flex flex-col shadow-lg">
+                <h2 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center">
+                    <i class="fas fa-signs-post mr-2 text-indigo-400"></i> Anticipated Paths
+                </h2>
+                
+                <div x-show="$store.board.selectedVariation" class="space-y-4 flex-1 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-xs text-slate-300 font-bold">Predicted sequence:</span>
+                            <span class="text-[10px] bg-slate-800 text-slate-400 font-mono px-2 py-0.5 rounded-lg" 
+                                  x-text="$store.board.selectedVariation.length + ' moves'"></span>
+                        </div>
+                        
+                        <!-- Flow of Variation stones -->
+                        <div class="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto p-2 bg-black/25 rounded-2xl border border-white/5">
+                            <template x-for="(move, i) in $store.board.selectedVariation" :key="i">
+                                <div class="flex items-center">
+                                    <div class="px-2 py-1 rounded bg-slate-800/80 border border-white/5 text-[10px] font-bold font-mono tracking-tighter flex items-center shadow-sm"
+                                         :class="($store.board.variationMode && $store.board.variationStep === i + 1) ? 'bg-indigo-600/30 border-indigo-500 text-indigo-200' : ''">
+                                        <!-- Miniature Stone representation inside flow bubble -->
+                                        <span class="w-2 h-2 rounded-full mr-1.5 inline-block shadow-sm"
+                                              :class="($store.board.selectedVariationColors && $store.board.selectedVariationColors[i] === 'black') ? 'stone-black' : 'stone-white'"></span>
+                                        <span x-text="(i + 1) + ':' + move"></span>
+                                    </div>
+                                    <i x-show="i < $store.board.selectedVariation.length - 1" class="fas fa-chevron-right text-[8px] mx-0.5 text-slate-600"></i>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Variation Explorer trigger -->
+                    <div class="mt-4 p-4 rounded-2xl bg-indigo-950/20 border border-indigo-500/20 flex flex-col justify-between">
+                        <div>
+                            <h3 class="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1.5 flex items-center">
+                                <i class="fas fa-compass mr-1.5 animate-pulse"></i> Path Explorer
+                            </h3>
+                            <p class="text-xs text-slate-400 leading-relaxed font-medium">Click explore to interactively step through this future sequence on the main board.</p>
+                        </div>
+                        <button @click="$store.board.enterVariationMode()" 
+                                class="mt-3.5 w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all duration-200 shadow-md shadow-indigo-600/20 flex items-center justify-center">
+                            <i class="fas fa-route mr-1.5"></i> Play Variation Path
+                        </button>
+                    </div>
+                </div>
+
+                <div x-show="!$store.board.selectedVariation" class="flex-1 flex flex-col items-center justify-center text-slate-500 italic text-sm">
+                    <i class="fas fa-route text-3xl mb-3 text-slate-700"></i>
+                    Select a recommended move to examine future variations...
+                </div>
+            </div>
+            
+            <!-- Moves History List -->
+            <div class="glass p-5 rounded-3xl shadow-lg flex-1 flex flex-col overflow-hidden max-h-[300px]">
+                <h2 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center">
+                    <i class="fas fa-list-ol mr-2 text-indigo-400"></i> Game Record
+                </h2>
+                <div class="flex-1 overflow-y-auto space-y-1.5 pr-1 font-mono text-xs">
+                    <div class="grid grid-cols-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-white/5 pb-1 mb-2">
+                        <span>Step</span>
+                        <span>Black</span>
+                        <span>White</span>
+                    </div>
+                    <!-- Loop two-by-two for standard scorecard -->
+                    <template x-for="i in Math.ceil($store.board.moveHistory.length / 2)" :key="i">
+                        <div class="grid grid-cols-3 py-1 border-b border-white/2">
+                            <span class="text-slate-500" x-text="i"></span>
+                            <span class="font-bold text-slate-300" x-text="$store.board.moveHistory[(i-1)*2] || ''"></span>
+                            <span class="font-bold text-slate-400" x-text="$store.board.moveHistory[(i-1)*2 + 1] || ''"></span>
+                        </div>
+                    </template>
+                    <template x-if="$store.board.moveHistory.length === 0">
+                        <div class="text-slate-600 italic text-center py-6 text-xs">No moves played yet</div>
+                    </template>
+                </div>
+            </div>
+        </aside>
+
+    </main>
+
+    <script>
+        // Core Go capture and liberties solver
+        function computeBoardState(moves) {
+            const size = 19;
+            const grid = Array(size).fill(null).map(() => Array(size).fill(null));
+            let captures = { black: 0, white: 0 };
+            
+            const CHARS = "ABCDEFGHJKLMNOPQRST";
+            
+            function getNeighbors(x, y) {
+                const neighbors = [];
+                if (x > 0) neighbors.push([x - 1, y]);
+                if (x < size - 1) neighbors.push([x + 1, y]);
+                if (y > 0) neighbors.push([x, y - 1]);
+                if (y < size - 1) neighbors.push([x, y + 1]);
+                return neighbors;
+            }
+            
+            function getGroup(startX, startY, color, visited = new Set()) {
+                const stones = [];
+                const liberties = new Set();
+                const queue = [[startX, startY]];
+                const key = `${startX},${startY}`;
+                visited.add(key);
+                
+                while (queue.length > 0) {
+                    const [cx, cy] = queue.shift();
+                    stones.push([cx, cy]);
+                    
+                    for (const [nx, ny] of getNeighbors(cx, cy)) {
+                        if (grid[ny][nx] === null) {
+                            liberties.add(`${nx},${ny}`);
+                        } else if (grid[ny][nx] === color && !visited.has(`${nx},${ny}`)) {
+                            visited.add(`${nx},${ny}`);
+                            queue.push([nx, ny]);
+                        }
+                    }
+                }
+                
+                return { stones, liberties };
+            }
+            
+            for (let i = 0; i < moves.length; i++) {
+                const move = moves[i];
+                if (move === "pass" || move === "PASS") continue;
+                
+                const colChar = move[0];
+                const col = CHARS.indexOf(colChar);
+                const row = 19 - parseInt(move.slice(1));
+                const color = (i % 2 === 0) ? "black" : "white";
+                const opponentColor = (color === "black") ? "white" : "black";
+                
+                if (col < 0 || col >= 19 || row < 0 || row >= 19) continue;
+                
+                // Place stone temporarily
+                grid[row][col] = color;
+                
+                // Check adjacent opponent stones for captures
+                const capturedStones = [];
+                const checkedOpponents = new Set();
+                
+                for (const [nx, ny] of getNeighbors(col, row)) {
+                    if (grid[ny][nx] === opponentColor && !checkedOpponents.has(`${nx},${ny}`)) {
+                        const group = getGroup(nx, ny, opponentColor, checkedOpponents);
+                        if (group.liberties.size === 0) {
+                            capturedStones.push(...group.stones);
+                        }
+                    }
+                }
+                
+                // Remove captured stones
+                for (const [cx, cy] of capturedStones) {
+                    grid[cy][cx] = null;
+                    captures[color]++;
+                }
+                
+                // Suicide check
+                const ownGroup = getGroup(col, row, color, new Set());
+                if (ownGroup.liberties.size === 0 && capturedStones.length === 0) {
+                    // Suicide is illegal! Undo placement
+                    grid[row][col] = null;
+                }
+            }
+            
+            return { grid, captures };
+        }
+
+        // Initialize Alpine Global State Store
+        document.addEventListener('alpine:init', () => {
+            Alpine.store('board', {
+                board: Array(19).fill(null).map(() => Array(19).fill(null)),
+                turn: 'black',
+                moveHistory: [],
+                captures: { black: 0, white: 0 },
+                winRate: 50,
+                scoreLead: 0.0,
+                
+                suggestions: [],
+                selectedSuggestion: null,
+                hoveredSuggestionIndex: null,
+                
+                // Variation Mode state
+                selectedVariation: null,
+                selectedVariationMove: null,
+                selectedVariationColors: [],
+                variationMode: false,
+                variationStep: 0,
+                
+                // Mouse Interactivity
+                hoveredIntersection: null,
+                
+                // OGS Sync details
+                ogsGameId: '',
+                geminiApiKey: localStorage.getItem('gemini_api_key') || '',
+                useGeminiExplanations: localStorage.getItem('use_gemini_explanations') !== 'false',
+                ogsPlayers: null,
+                liveSyncActive: false,
+                syncInterval: null,
+                syncing: false,
+                
+                // Custom Proposed Move details
+                customMode: false,
+                customMove: null,
+                customAnalysisLoading: false,
+                customAnalysis: null,
+                hoveredCustomMove: false,
+                
+                letters: ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T"],
+                ws: null,
+                wsStatus: 'disconnected',
+                engineMode: 'human',
+                superhumanAvailable: false,
+                reconnectAttempts: 0,
+                playStyle: localStorage.getItem('play_style') || 'normal',
+                playerColor: localStorage.getItem('player_color') || 'none',
+                searchDepth: localStorage.getItem('search_depth') || 'standard',
+
+                init() {
+                    this.connectWS();
+                    this.rebuildBoard();
+                },
+
+                clearSelection() {
+                    this.selectedSuggestion = null;
+                    this.hoveredSuggestionIndex = null;
+                    this.selectedVariation = null;
+                    this.selectedVariationMove = null;
+                    this.selectedVariationColors = [];
+                    this.variationMode = false;
+                    this.variationStep = 0;
+                },
+
+                toggleGeminiExplanations() {
+                    this.useGeminiExplanations = !this.useGeminiExplanations;
+                    localStorage.setItem('use_gemini_explanations', this.useGeminiExplanations);
+                },
+
+                setPlayerColor(color) {
+                    this.playerColor = color;
+                    localStorage.setItem('player_color', color);
+                    this.requestAnalysis();
+                    if (this.customMove) {
+                        this.requestCustomAnalysis();
+                    }
+                },
+
+                setPlayStyle(style) {
+                    this.playStyle = style;
+                    localStorage.setItem('play_style', style);
+                    this.requestAnalysis();
+                    if (this.customMove) {
+                        this.requestCustomAnalysis();
+                    }
+                },
+
+                setSearchDepth(depth) {
+                    this.searchDepth = depth;
+                    localStorage.setItem('search_depth', depth);
+                    this.requestAnalysis();
+                    if (this.customMove) {
+                        this.requestCustomAnalysis();
+                    }
+                },
+
+                // WebSocket AI engine broker
+                connectWS() {
+                    this.wsStatus = 'connecting';
+                    const isFile = window.location.protocol === 'file:';
+                    const protocol = isFile ? 'ws:' : (window.location.protocol === 'https:' ? 'wss:' : 'ws:');
+                    const host = isFile ? '127.0.0.1:8000' : window.location.host;
+                    this.ws = new WebSocket(`${protocol}//${host}/ws/analysis`);
+                    
+                    this.ws.onopen = () => {
+                        console.log("WebSocket connected.");
+                        this.wsStatus = 'connected';
+                        this.reconnectAttempts = 0;
+                        if (this.moveHistory.length > 0) this.requestAnalysis();
+                    };
+
+                    this.ws.onmessage = (event) => {
+                        const message = JSON.parse(event.data);
+                        if (message.type === 'analysis_result') {
+                            this.handleAnalysis(message.data);
+                        } else if (message.type === 'engine_mode_changed') {
+                            this.engineMode = message.mode;
+                            if (message.superhuman_available !== undefined) {
+                                this.superhumanAvailable = message.superhuman_available;
+                            }
+                            console.log("Engine mode updated to:", message.mode);
+                        } else if (message.type === 'error') {
+                            alert(message.message);
+                        }
+                    };
+
+
+                    this.ws.onclose = () => {
+                        this.wsStatus = 'disconnected';
+                        setTimeout(() => {
+                            this.reconnectAttempts++;
+                            if (this.reconnectAttempts < 15) this.connectWS();
+                        }, 2500);
+                    };
+
+                    this.ws.onerror = (err) => {
+                        console.error("WebSocket Error:", err);
+                        this.wsStatus = 'error';
+                    };
+                },
+
+                // OGS Rank Rating mapping helper
+                formatRank(rating) {
+                    if (!rating) return "?";
+                    const rank = Math.log(rating / 850) / 0.032;
+                    if (rank < 30) {
+                        const kyu = Math.round(30 - rank);
+                        return `${kyu}k`;
+                    } else {
+                        const dan = Math.round(rank - 29);
+                        return `${dan}d`;
+                    }
+                },
+
+                // CORS-Free OGS Sync Action
+                toggleLiveSync() {
+                    this.liveSyncActive = !this.liveSyncActive;
+                    // Broadcast event for sync visual state
+                    window.dispatchEvent(new CustomEvent('ogs-update', { detail: { active: this.liveSyncActive }}));
+                    
+                    if (this.liveSyncActive) {
+                        this.syncWithOGS();
+                        this.syncInterval = setInterval(() => {
+                            this.syncWithOGS();
+                        }, 3000);
+                    } else {
+                        if (this.syncInterval) {
+                            clearInterval(this.syncInterval);
+                            this.syncInterval = null;
+                        }
+                        this.ogsPlayers = null;
+                    }
+                },
+
+                toggleEngineMode() {
+                    const targetMode = this.engineMode === 'human' ? 'superhuman' : 'human';
+                    if (this.ws && this.wsStatus === 'connected') {
+                        this.clearSelection();
+                        this.ws.send(JSON.stringify({
+                            type: 'change_engine_mode',
+                            mode: targetMode
+                        }));
+                    } else {
+                        alert("WebSocket is not connected. Can't change engine mode right now.");
+                    }
+                },
+
+                async syncWithOGS() {
+                    if (!this.ogsGameId) return;
+                    this.syncing = true;
+                    try {
+                        const response = await fetch(`/api/ogs/${this.ogsGameId}`);
+                        const data = await response.json();
+                        
+                        if (data.error) {
+                            console.error("Proxy error:", data.error);
+                            return;
+                        }
+                        
+                        if (data.gamedata && data.gamedata.players) {
+                            const p = data.gamedata.players;
+                            this.ogsPlayers = {
+                                black: `${p.black.username} [${this.formatRank(p.black.rating)}]`,
+                                white: `${p.white.username} [${this.formatRank(p.white.rating)}]`
+                            };
+                        }
+                        
+                        const ogsMoves = data.gamedata.moves || [];
+                        const ogsNotation = ogsMoves.map(m => this.coordsToNotation(m[0], m[1]));
+                        
+                        if (JSON.stringify(this.moveHistory) !== JSON.stringify(ogsNotation)) {
+                            this.clearSelection();
+                            this.moveHistory = ogsNotation;
+                            this.turn = (this.moveHistory.length % 2 === 0) ? 'black' : 'white';
+                            this.rebuildBoard();
+                            this.requestAnalysis();
+                        }
+                    } catch (e) {
+                        console.error("Failed to sync OGS:", e);
+                    } finally {
+                        this.syncing = false;
+                    }
+                },
+
+                // Handle inbound KataGo evaluations
+                handleAnalysis(data) {
+                    // Ignore warning or status messages that don't contain actual analysis results (rootInfo)
+                    if (!data || !data.rootInfo) {
+                        console.log("Ignoring non-analysis or warning message:", data);
+                        return;
+                    }
+                    
+                    if (data.id === 'custom_query') {
+                        const root = data.rootInfo;
+                        if (root) {
+                            const postWinrate = root.winrate;
+                            const postScoreLead = root.scoreLead;
+                            
+                            // Perspective adjustment
+                            const turnColor = this.turn === 'black' ? 'B' : 'W';
+                            const preWinrate = this.winRate / 100;
+                            const preScore = parseFloat(this.scoreLead);
+                            
+                            const winrateChange = turnColor === 'B' 
+                                ? (postWinrate - preWinrate) 
+                                : -(postWinrate - preWinrate);
+                                
+                            const scoreChange = turnColor === 'B' 
+                                ? (postScoreLead - preScore) 
+                                : -(postScoreLead - preScore);
+                            
+                            const sortedMoves = (data.moveInfos || []).sort((a, b) => b.winrate - a.winrate);
+                            const topFollowup = sortedMoves[0];
+                            const pv = topFollowup ? [this.customMove, ...topFollowup.pv] : [this.customMove];
+                            
+                            this.customAnalysis = {
+                                winrate: Math.round(postWinrate * 100),
+                                score: postScoreLead.toFixed(1),
+                                winrateChange: Math.round(winrateChange * 100),
+                                scoreChange: scoreChange.toFixed(1),
+                                pv: pv,
+                                aiCommentary: null,
+                                loadingCommentary: false
+                            };
+
+                            // Auto-populate Anticipated Paths for custom proposed move
+                            this.selectedSuggestion = null;
+                            this.selectedVariation = pv;
+                            this.selectedVariationMove = this.customMove;
+                            this.selectedVariationColors = pv.map((_, i) => {
+                                return (i % 2 === 0) ? this.turn : (this.turn === 'black' ? 'white' : 'black');
+                            });
+                        }
+                        this.customAnalysisLoading = false;
+                        return;
+                    }
+
+                    // Otherwise treat as normal root evaluation query
+                    const root = data.rootInfo;
+                    if (root) {
+                        this.winRate = Math.round(root.winrate * 100);
+                        this.scoreLead = root.scoreLead.toFixed(1);
+                    }
+                    
+                    const sortedMoves = (data.moveInfos || []).sort((a, b) => b.winrate - a.winrate);
+                    
+                    this.suggestions = sortedMoves.slice(0, 4).map(info => ({
+                        move: info.move,
+                        winrate: info.winrate,
+                        score: info.scoreMean,
+                        coords: this.notationToCoords(info.move),
+                        pv: info.pv || [],
+                        explanation: '',
+                        aiCommentary: null,
+                        loadingExplanation: false
+                    }));
+                    
+                    this.suggestions.forEach(sug => {
+                        sug.explanation = this.generateLocalExplanation(sug);
+                    });
+                },
+
+                generateLocalExplanation(sug) {
+                    if (this.suggestions.length === 0) return '';
+                    const top = this.suggestions[0];
+                    const wrDiff = sug.winrate - top.winrate;
+                    const scoreDiff = sug.score - top.score;
+                    const colorName = this.turn === 'black' ? 'Black' : 'White';
+                    
+                    if (sug.move === top.move) {
+                        return "This is the engine's primary choice. It balances secure territory with shape thickness.";
+                    }
+                    if (wrDiff > -0.02) {
+                        return "An excellent alternative. Keeps similar strategic weight and positional flexibility.";
+                    }
+                    if (wrDiff > -0.08) {
+                        return "A slightly slower or more defensive option, prioritizing local safety over sente.";
+                    }
+                    return "A sub-optimal selection that creates light shapes or compromises local safety.";
+                },
+
+                // Deep AI Explanations query
+                async fetchAICommentary(index) {
+                    const sug = this.suggestions[index];
+                    if (sug.aiCommentary) return;
+                    
+                    sug.loadingExplanation = true;
+                    try {
+                        const top = this.suggestions[0];
+                        const apiKeyToSend = this.useGeminiExplanations ? (this.geminiApiKey || null) : null;
+                        const response = await fetch('/api/explain_move', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                move: sug.move,
+                                color: this.turn === 'black' ? 'B' : 'W',
+                                winrate_before: top.winrate,
+                                winrate_after: sug.winrate,
+                                score_before: top.score,
+                                score_after: sug.score,
+                                pv: sug.pv,
+                                board_state: this.moveHistory.join(' '),
+                                api_key: apiKeyToSend
+                            })
+                        });
+                        const data = await response.json();
+                        sug.aiCommentary = data.explanation;
+                    } catch (e) {
+                        console.error("Error fetching AI commentary:", e);
+                    } finally {
+                        sug.loadingExplanation = false;
+                    }
+                },
+
+                // GTP Coordinate Conversions
+                coordsToNotation(col, row) {
+                    if (col === -1 || col < 0 || col === null || col === undefined || row === -1 || row < 0) {
+                        return "pass";
+                    }
+                    const c = this.letters[col];
+                    const r = 19 - row;
+                    return c + r;
+                },
+
+                notationToCoords(not) {
+                    if (!not || not.toLowerCase() === 'pass') {
+                        return [-1, -1];
+                    }
+                    const colChar = not[0];
+                    const col = this.letters.indexOf(colChar);
+                    const row = 19 - parseInt(not.slice(1));
+                    return [col, row];
+                },
+
+                // Calculate complete Board Grid with correct Rules
+                getBoardAtStep() {
+                    if (this.variationMode && this.selectedVariation) {
+                        const history = [
+                            ...this.moveHistory,
+                            ...this.selectedVariation.slice(0, this.variationStep)
+                        ];
+                        return computeBoardState(history);
+                    }
+                    return computeBoardState(this.moveHistory);
+                },
+
+                rebuildBoard() {
+                    const { grid, captures } = this.getBoardAtStep();
+                    this.board = grid;
+                    this.captures = captures;
+                },
+
+                get placedStones() {
+                    const list = [];
+                    for (let r = 0; r < 19; r++) {
+                        for (let c = 0; c < 19; c++) {
+                            if (this.board[r][c]) {
+                                list.push({
+                                    color: this.board[r][c],
+                                    x: c * 28 + 19,
+                                    y: r * 28 + 19,
+                                    key: `${c},${r}`
+                                });
+                            }
+                        }
+                    }
+                    return list;
+                },
+
+                get lastPlayedStoneCoords() {
+                    if (this.variationMode && this.selectedVariation && this.variationStep > 0) {
+                        const lastMove = this.selectedVariation[this.variationStep - 1];
+                        if (lastMove === 'pass' || lastMove === 'PASS') return null;
+                        const [col, row] = this.notationToCoords(lastMove);
+                        return { x: col * 28 + 28, y: row * 28 + 28 };
+                    }
+                    if (this.moveHistory.length > 0) {
+                        const lastMove = this.moveHistory[this.moveHistory.length - 1];
+                        if (lastMove === 'pass' || lastMove === 'PASS') return null;
+                        const [col, row] = this.notationToCoords(lastMove);
+                        return { x: col * 28 + 28, y: row * 28 + 28 };
+                    }
+                    return null;
+                },
+
+                // Mouse Move listeners
+                handleBoardMouseMove(event) {
+                    if (this.variationMode) return;
+                    
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    const x = event.clientX - rect.left;
+                    const y = event.clientY - rect.top;
+                    
+                    const col = Math.round((x - 48) / 28);
+                    const row = Math.round((y - 48) / 28);
+                    
+                    if (col >= 0 && col < 19 && row >= 0 && row < 19) {
+                        this.hoveredIntersection = { col, row };
+                    } else {
+                        this.hoveredIntersection = null;
+                    }
+                },
+
+                shouldShowGhost() {
+                    if (this.variationMode) return false;
+                    if (!this.hoveredIntersection) return false;
+                    const { col, row } = this.hoveredIntersection;
+                    return !this.board[row][col];
+                },
+
+                get ghostCoords() {
+                    if (!this.hoveredIntersection) return { x: 0, y: 0 };
+                    const { col, row } = this.hoveredIntersection;
+                    return { x: col * 28 + 19, y: row * 28 + 19 };
+                },
+
+                // PV Ghost Stone overlay logic
+                get activePVStones() {
+                    if (this.variationMode) return [];
+                    
+                    if (this.hoveredCustomMove && this.customAnalysis && this.customAnalysis.pv) {
+                        return this.customAnalysis.pv.map((move, index) => {
+                            if (move === "pass" || move === "PASS") return null;
+                            const [col, row] = this.notationToCoords(move);
+                            return {
+                                color: 'gold',
+                                isCustom: true,
+                                x: col * 28 + 19,
+                                y: row * 28 + 19,
+                                key: `pv-custom-${index}-${col}-${row}`
+                            };
+                        }).filter(s => s !== null);
+                    }
+                    
+                    if (this.hoveredSuggestionIndex === null) return [];
+                    
+                    const sug = this.suggestions[this.hoveredSuggestionIndex];
+                    if (!sug || !sug.pv) return [];
+                    
+                    return sug.pv.map((move, index) => {
+                        if (move === "pass" || move === "PASS") return null;
+                        const [col, row] = this.notationToCoords(move);
+                        const stoneColor = (index % 2 === 0) ? this.turn : (this.turn === 'black' ? 'white' : 'black');
+                        return {
+                            color: stoneColor,
+                            x: col * 28 + 19,
+                            y: row * 28 + 19,
+                            key: `pv-sug-${index}-${col}-${row}`
+                        };
+                    }).filter(s => s !== null);
+                },
+
+                // Direct Placement
+                handleBoardClick(event) {
+                    if (this.variationMode) return;
+                    
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    const x = event.clientX - rect.left;
+                    const y = event.clientY - rect.top;
+                    
+                    const col = Math.round((x - 48) / 28);
+                    const row = Math.round((y - 48) / 28);
+                    
+                    if (col >= 0 && col < 19 && row >= 0 && row < 19) {
+                        if (this.customMode) {
+                            if (this.board[row][col]) return;
+                            
+                            const moveNot = this.coordsToNotation(col, row);
+                            
+                            // Suicide check
+                            const testHistory = [...this.moveHistory, moveNot];
+                            const testResult = computeBoardState(testHistory);
+                            if (testResult.grid[row][col] === null) {
+                                alert("Illegal proposed move: Suicide is not allowed.");
+                                return;
+                            }
+                            
+                            this.customMove = moveNot;
+                            this.customAnalysisLoading = true;
+                            this.customAnalysis = null;
+                            this.requestCustomAnalysis();
+                        } else {
+                            this.placeStone(col, row);
+                        }
+                    }
+                },
+
+                placeStone(col, row) {
+                    if (this.board[row][col]) return;
+                    
+                    const moveNot = this.coordsToNotation(col, row);
+                    const testHistory = [...this.moveHistory, moveNot];
+                    const testResult = computeBoardState(testHistory);
+                    
+                    if (testResult.grid[row][col] === null) {
+                        alert("Illegal move: Suicide is not allowed.");
+                        return;
+                    }
+                    
+                    this.exitCustomMode();
+                    this.clearSelection();
+                    
+                    this.moveHistory.push(moveNot);
+                    this.turn = this.turn === 'black' ? 'white' : 'black';
+                    this.rebuildBoard();
+                    this.requestAnalysis();
+                },
+
+                passMove() {
+                    this.exitCustomMode();
+                    this.clearSelection();
+                    this.moveHistory.push("pass");
+                    this.turn = this.turn === 'black' ? 'white' : 'black';
+                    this.rebuildBoard();
+                    this.requestAnalysis();
+                },
+
+                undoMove() {
+                    if (this.moveHistory.length === 0) return;
+                    this.exitCustomMode();
+                    this.clearSelection();
+                    this.moveHistory.pop();
+                    this.turn = this.turn === 'black' ? 'white' : 'black';
+                    this.rebuildBoard();
+                    this.requestAnalysis();
+                },
+
+                resetBoard() {
+                    this.exitCustomMode();
+                    this.clearSelection();
+                    this.moveHistory = [];
+                    this.turn = 'black';
+                    this.suggestions = [];
+                    this.rebuildBoard();
+                },
+
+                requestAnalysis() {
+                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        const maxVisits = this.searchDepth === 'deep' ? 3000 : 1000;
+                        this.ws.send(JSON.stringify({
+                            type: "request_analysis",
+                            moves: this.moveHistory.map((m, i) => [i % 2 === 0 ? 'B' : 'W', m]),
+                            play_style: this.playStyle,
+                            player_color: this.playerColor,
+                            max_visits: maxVisits
+                        }));
+                    }
+                },
+
+                requestCustomAnalysis() {
+                    if (this.ws && this.ws.readyState === WebSocket.OPEN && this.customMove) {
+                        const turnColor = this.turn === 'black' ? 'B' : 'W';
+                        const moves = [
+                            ...this.moveHistory.map((m, i) => [i % 2 === 0 ? 'B' : 'W', m]),
+                            [turnColor, this.customMove]
+                        ];
+                        const maxVisits = this.searchDepth === 'deep' ? 3000 : 1000;
+                        this.ws.send(JSON.stringify({
+                            type: "request_analysis",
+                            id: "custom_query",
+                            moves: moves,
+                            play_style: this.playStyle,
+                            player_color: this.playerColor,
+                            max_visits: maxVisits
+                        }));
+                    }
+                },
+
+                exitCustomMode() {
+                    this.customMode = false;
+                    this.customMove = null;
+                    this.customAnalysisLoading = false;
+                    this.customAnalysis = null;
+                    this.hoveredCustomMove = false;
+                },
+
+                exploreCustomVariation() {
+                    if (!this.customAnalysis || !this.customAnalysis.pv) return;
+                    
+                    this.selectedSuggestion = null;
+                    this.selectedVariation = this.customAnalysis.pv;
+                    this.selectedVariationMove = this.customMove;
+                    
+                    this.selectedVariationColors = this.selectedVariation.map((_, i) => {
+                        return (i % 2 === 0) ? this.turn : (this.turn === 'black' ? 'white' : 'black');
+                    });
+                    
+                    this.variationMode = true;
+                    this.variationStep = 1;
+                    this.rebuildBoard();
+                },
+
+                addCustomMoveToGame() {
+                    if (!this.customMove) return;
+                    const [col, row] = this.notationToCoords(this.customMove);
+                    
+                    this.addCustomMoveAction(col, row);
+                },
+
+                addCustomMoveAction(col, row) {
+                    this.exitCustomMode();
+                    this.placeStone(col, row);
+                },
+
+                async fetchCustomAICommentary() {
+                    if (!this.customAnalysis || !this.customMove) return;
+                    if (this.customAnalysis.aiCommentary) return;
+                    
+                    this.customAnalysis.loadingCommentary = true;
+                    try {
+                        const preWinrate = this.winRate / 100;
+                        const preScore = parseFloat(this.scoreLead);
+                        const turnColor = this.turn === 'black' ? 'B' : 'W';
+                        
+                        const postWinrate = this.customAnalysis.winrate / 100;
+                        const postScore = parseFloat(this.customAnalysis.score);
+                        
+                        const apiKeyToSend = this.useGeminiExplanations ? (this.geminiApiKey || null) : null;
+                        const topSuggestionsToSend = this.suggestions.map(s => ({
+                            move: s.move,
+                            winrate: s.winrate,
+                            score: s.score
+                        }));
+
+                        const response = await fetch('/api/explain_move', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                move: this.customMove,
+                                color: turnColor,
+                                winrate_before: preWinrate,
+                                winrate_after: postWinrate,
+                                score_before: preScore,
+                                score_after: postScore,
+                                pv: this.customAnalysis.pv,
+                                board_state: this.moveHistory.join(' '),
+                                api_key: apiKeyToSend,
+                                top_suggestions: topSuggestionsToSend
+                            })
+                        });
+                        const data = await response.json();
+                        this.customAnalysis.aiCommentary = data.explanation;
+                    } catch (e) {
+                        console.error("Error fetching custom AI commentary:", e);
+                    } finally {
+                        this.customAnalysis.loadingCommentary = false;
+                    }
+                },
+
+                selectSuggestion(index) {
+                    this.selectedSuggestion = index;
+                    this.selectedVariation = this.suggestions[index].pv;
+                    this.selectedVariationMove = this.suggestions[index].move;
+                    
+                    // Precompute variation stone colors
+                    this.selectedVariationColors = this.selectedVariation.map((_, i) => {
+                        return (i % 2 === 0) ? this.turn : (this.turn === 'black' ? 'white' : 'black');
+                    });
+                },
+
+                // Variation Mode exploration controls
+                enterVariationMode() {
+                    if (!this.selectedVariation) return;
+                    this.variationMode = true;
+                    this.variationStep = 1;
+                    this.rebuildBoard();
+                },
+
+                stepVariation(amount) {
+                    this.variationStep = Math.max(0, Math.min(this.selectedVariation.length, this.variationStep + amount));
+                    this.rebuildBoard();
+                },
+
+                exitVariationMode() {
+                    this.variationMode = false;
+                    this.variationStep = 0;
+                    this.rebuildBoard();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
